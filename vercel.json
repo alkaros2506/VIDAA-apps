@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "apps/example-app/dist",
+  "buildCommand": "cd ../.. && npx turbo run build --filter=example-app...",
+  "outputDirectory": "dist",
   "framework": null
 }
