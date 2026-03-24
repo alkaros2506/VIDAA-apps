@@ -3,9 +3,20 @@ import {
   init,
   useFocusable as useNoriginFocusable,
   FocusContext,
+  setFocus,
 } from '@noriginmedia/norigin-spatial-navigation';
 
 let initialized = false;
+
+function ensureInit(debug: boolean) {
+  if (!initialized) {
+    init({
+      debug,
+      visualDebug: debug,
+    });
+    initialized = true;
+  }
+}
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -13,17 +24,17 @@ interface NavigationProviderProps {
 }
 
 export function NavigationProvider({ children, debug = false }: NavigationProviderProps) {
-  useEffect(() => {
-    if (!initialized) {
-      init({
-        debug,
-        visualDebug: debug,
-      });
-      initialized = true;
-    }
-  }, [debug]);
+  // init() MUST run synchronously before any useFocusable() hooks
+  ensureInit(debug);
 
-  const { ref, focusKey } = useNoriginFocusable();
+  const { ref, focusKey, focusSelf } = useNoriginFocusable({
+    isFocusBoundary: false,
+  });
+
+  // Set focus on the root after mount so the first focusable child receives focus
+  useEffect(() => {
+    focusSelf();
+  }, [focusSelf]);
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -44,10 +55,15 @@ interface FocusableItemProps {
 }
 
 export function FocusableItem({ children, onEnterPress, focusKey }: FocusableItemProps) {
-  const { ref, focused } = useNoriginFocusable({
+  const { ref, focused, focusSelf } = useNoriginFocusable({
     onEnterPress,
     focusKey,
   });
 
-  return <>{children({ ref, focused })}</>;
+  const handleClick = () => {
+    focusSelf();
+    onEnterPress?.();
+  };
+
+  return <div onClick={handleClick} style={{ display: 'contents' }}>{children({ ref, focused })}</div>;
 }
