@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    strategy:
+      matrix:
+        package:
+          - packages/core
+          - packages/wasm-engine
+          - packages/platform-vidaa
+          - packages/platform-tvos
+          - apps/example-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Build dependencies
+        run: npx turbo run build --filter="${{ matrix.package }}^..."
+
+      - name: Run tests with coverage
+        run: npx turbo run test:coverage --filter="${{ matrix.package }}"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ hashFiles(format('{0}/package.json', matrix.package)) }}
+          path: ${{ matrix.package }}/coverage/
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Upload example app build
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-app-dist
+          path: apps/example-app/dist/
+          retention-days: 30

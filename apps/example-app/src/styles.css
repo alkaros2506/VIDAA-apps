@@ -1,0 +1,158 @@
+/* === TV App Styles === */
+/* Designed for 1920x1080 TV displays */
+
+.tv-safe-area {
+  padding: 48px 90px;
+  width: 1920px;
+  height: 1080px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Hero Banner */
+.hero-banner {
+  width: 100%;
+  height: 400px;
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  display: flex;
+  align-items: flex-end;
+  padding: 40px;
+  margin-bottom: 30px;
+  flex-shrink: 0;
+}
+
+.hero-content {
+  max-width: 600px;
+}
+
+.hero-title {
+  font-size: 48px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.hero-subtitle {
+  font-size: 20px;
+  color: #b0b0b0;
+  margin-bottom: 24px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.hero-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.hero-button {
+  padding: 14px 36px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  border: 2px solid transparent;
+  cursor: none;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.hero-button.primary {
+  background: #e50914;
+  color: white;
+}
+
+.hero-button.secondary {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.hero-button.focused {
+  transform: scale(1.08);
+  border-color: #ffffff;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+/* Content Rows */
+.content-rows {
+  flex: 1;
+  overflow: hidden;
+}
+
+.content-row {
+  margin-bottom: 24px;
+}
+
+.row-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #e0e0e0;
+}
+
+.row-items {
+  display: flex;
+  gap: 16px;
+  overflow-x: hidden;
+}
+
+/* Content Cards */
+.content-card {
+  width: 200px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 8px;
+  border: 3px solid transparent;
+}
+
+.content-card.focused {
+  transform: scale(1.1);
+  border-color: #ffffff;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
+  z-index: 10;
+}
+
+.card-image {
+  width: 100%;
+  height: 280px;
+  background-size: cover;
+  background-position: center;
+  background-color: #2a2a3e;
+  border-radius: 6px 6px 0 0;
+}
+
+.card-title {
+  padding: 10px;
+  font-size: 14px;
+  color: #c0c0c0;
+  background: #1a1a2e;
+  border-radius: 0 0 6px 6px;
+}
+
+.content-card.focused .card-title {
+  color: #ffffff;
+}
+
+/* Detail Overlay */
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-size: 32px;
+}
+
+.detail-overlay .hint {
+  font-size: 18px;
+  color: #888;
+  margin-top: 16px;
+}
+
+/* Focus indicator for accessibility */
+*:focus-visible {
+  outline: none;
+}
