@@ -15,7 +15,7 @@ export function TVApp({ children, debug = false }: TVAppProps) {
   return (
     <PlatformProvider>
       <NavigationProvider debug={debug}>
-        <div className="tv-app" style={{ cursor: 'none', overflow: 'hidden', width: '100vw', height: '100vh' }}>
+        <div className="tv-app" style={{ overflow: 'hidden', width: '100vw', height: '100vh' }}>
           {children}
         </div>
       </NavigationProvider>
