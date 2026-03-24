@@ -3,7 +3,6 @@ import {
   init,
   useFocusable as useNoriginFocusable,
   FocusContext,
-  setFocus,
 } from '@noriginmedia/norigin-spatial-navigation';
 
 let initialized = false;
