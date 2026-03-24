@@ -20,7 +20,7 @@ vi.mock('@noriginmedia/norigin-spatial-navigation', () => ({
 describe('App', () => {
   it('renders hero banner', () => {
     render(<App />);
-    expect(screen.getByText('Featured Show')).toBeInTheDocument();
+    expect(screen.getAllByText('Big Buck Bunny').length).toBeGreaterThan(0);
   });
 
   it('renders content rows', () => {

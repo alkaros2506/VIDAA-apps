@@ -5,9 +5,10 @@ interface HeroBannerProps {
   title: string;
   subtitle: string;
   backgroundUrl: string;
+  onPlay?: () => void;
 }
 
-export function HeroBanner({ title, subtitle, backgroundUrl }: HeroBannerProps) {
+export function HeroBanner({ title, subtitle, backgroundUrl, onPlay }: HeroBannerProps) {
   return (
     <div
       className="hero-banner"
@@ -19,7 +20,7 @@ export function HeroBanner({ title, subtitle, backgroundUrl }: HeroBannerProps) 
         <h1 className="hero-title">{title}</h1>
         <p className="hero-subtitle">{subtitle}</p>
         <div className="hero-actions">
-          <FocusableItem focusKey="hero-play" onEnterPress={() => console.log('Play pressed')}>
+          <FocusableItem focusKey="hero-play" onEnterPress={() => onPlay?.()}>
             {({ ref, focused }) => (
               <button ref={ref} className={`hero-button primary ${focused ? 'focused' : ''}`}>
                 Play

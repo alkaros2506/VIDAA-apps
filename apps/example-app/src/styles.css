@@ -152,6 +152,54 @@
   margin-top: 16px;
 }
 
+/* Video Player */
+.video-player-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 200;
+}
+
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.video-title-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 32px 48px;
+  font-size: 28px;
+  font-weight: 600;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+  pointer-events: none;
+}
+
+.video-paused-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 72px;
+  color: rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+}
+
+.video-hint {
+  position: absolute;
+  bottom: 32px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
 /* Focus indicator for accessibility */
 *:focus-visible {
   outline: none;
