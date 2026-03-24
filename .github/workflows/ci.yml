@@ -37,11 +37,11 @@ jobs:
     strategy:
       matrix:
         package:
-          - packages/core
-          - packages/wasm-engine
-          - packages/platform-vidaa
-          - packages/platform-tvos
-          - apps/example-app
+          - ./packages/core
+          - ./packages/wasm-engine
+          - ./packages/platform-vidaa
+          - ./packages/platform-tvos
+          - ./apps/example-app
     steps:
       - uses: actions/checkout@v4
 
