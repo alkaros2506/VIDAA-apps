@@ -1,39 +1,39 @@
 # @tv-app/platform-tvos
 
-Apple tvOS platform layer for the TV App Toolkit. This package provides the bridge between your React web app and a native Swift application that hosts it inside a `WKWebView` on Apple TV.
+Apple tvOS platform layer for the TV App Toolkit. Bridges the React web app (running in a `WKWebView`) with a native Swift app shell, enabling Siri Remote navigation, native media playback via AVPlayer, and Top Shelf integration.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────┐
-│  Native Swift App (tvOS)        │
-│  TVAppViewController            │
-│  ┌───────────────────────────┐  │
-│  │  WKWebView                │  │
-│  │  ┌─────────────────────┐  │  │
-│  │  │  React App           │  │  │
-│  │  │  (@tv-app/core)      │  │  │
-│  │  └─────────────────────┘  │  │
-│  └───────────────────────────┘  │
-│  AVPlayer (native media)        │
-│  Top Shelf extension            │
-└─────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Apple TV                                            │
+│                                                      │
+│  ┌────────────┐    WKWebView     ┌────────────────┐  │
+│  │            │◄────────────────►│                │  │
+│  │  React App │    JS ↔ Swift    │ Swift          │  │
+│  │  (Web UI)  │    Bridge        │ TVAppView-     │  │
+│  │            │                  │ Controller     │  │
+│  └────────────┘                  └────────────────┘  │
+│                                                      │
+│  JS → Swift:                                         │
+│    webkit.messageHandlers.tvApp.postMessage(msg)     │
+│                                                      │
+│  Swift → JS:                                         │
+│    webView.evaluateJavaScript(                       │
+│      "window.__tvos_receive(json)"                   │
+│    )                                                 │
+└──────────────────────────────────────────────────────┘
 ```
 
-The React app runs as a standard web application inside `WKWebView`. The native Swift shell handles things the web cannot: Siri Remote gesture processing, native media playback via AVPlayer, Top Shelf content integration, and tvOS focus engine interaction.
-
-Communication between JavaScript and Swift happens through a bidirectional message bridge:
-
-- **JS to Swift:** `webkit.messageHandlers.tvApp.postMessage(message)`
-- **Swift to JS:** `webView.evaluateJavaScript("window.__tvos_receive(json)")`
+Your React app runs inside a `WKWebView` hosted by a native Swift tvOS application. The **TVOSBridge** class handles bidirectional communication between JavaScript and Swift, giving your web UI access to native tvOS capabilities.
 
 ---
 
 ## Installation
 
-This package is part of the TV App Toolkit monorepo:
+This package is part of the TV App Toolkit monorepo and depends on `@tv-app/core`:
 
 ```json
 {
@@ -44,84 +44,97 @@ This package is part of the TV App Toolkit monorepo:
 }
 ```
 
+Run `npm install` from the repo root to resolve workspace dependencies.
+
 ---
 
-## API Reference
+## TVOSBridge
 
-### `TVOSBridge`
+The `TVOSBridge` class manages all communication between your React app and the native Swift shell.
 
-Class that manages communication between the web app and the native Swift shell.
+### Communication Protocol
 
-```tsx
+| Direction | Mechanism |
+|-----------|-----------|
+| JS to Swift | `webkit.messageHandlers.tvApp.postMessage(msg)` |
+| Swift to JS | `webView.evaluateJavaScript("window.__tvos_receive(json)")` |
+
+### Methods
+
+#### `send(type: string, payload?: object): void`
+
+Send an arbitrary message to the Swift shell.
+
+```typescript
 import { TVOSBridge } from '@tv-app/platform-tvos';
 
-// Check if running inside the tvOS native wrapper
-if (TVOSBridge.isAvailable()) {
-  const bridge = new TVOSBridge();
-
-  // Send a message to Swift
-  bridge.send({ type: 'navigate', payload: { screen: 'details', id: '123' } });
-
-  // Play media via native AVPlayer
-  bridge.playMedia('https://example.com/video.m3u8', 'Episode Title');
-
-  // Update Top Shelf content
-  bridge.updateTopShelf([
-    { title: 'Show 1', imageUrl: 'https://...', id: 'show-1' },
-    { title: 'Show 2', imageUrl: 'https://...', id: 'show-2' },
-  ]);
-
-  // Listen for messages from Swift
-  const unsubscribe = bridge.on('lifecycle', (payload) => {
-    console.log('Lifecycle event:', payload);
-  });
-
-  // Clean up
-  unsubscribe();
-}
+const bridge = new TVOSBridge();
+bridge.send('analytics', { event: 'screen_view', screen: 'home' });
 ```
 
-**Static methods:**
+#### `playMedia(options: MediaOptions): void`
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `TVOSBridge.isAvailable()` | `boolean` | `true` if `window.__TVOS_BRIDGE__` is defined (set by the Swift wrapper) |
+Hand off media playback to the native AVPlayer. Use this instead of HTML5 `<video>` for DRM-protected content and better performance on tvOS hardware.
 
-**Instance methods:**
+```typescript
+bridge.playMedia({
+  url: 'https://stream.example.com/movie.m3u8',
+  title: 'Example Movie',
+  startPosition: 0,
+  drmConfig: {
+    type: 'fairplay',
+    certificateUrl: 'https://drm.example.com/cert',
+    licenseUrl: 'https://drm.example.com/license',
+  },
+});
+```
 
-| Method | Parameters | Description |
-|--------|------------|-------------|
-| `send(message)` | `TVOSMessage` | Send a message to the native Swift shell |
-| `playMedia(url, title?)` | `string, string?` | Tell Swift to play media via AVPlayer |
-| `updateTopShelf(items)` | `Array<{title, imageUrl, id}>` | Update the tvOS Top Shelf with content items |
-| `on(type, callback)` | `string, function` | Listen for messages from Swift; returns an unsubscribe function |
+The native AVPlayer handles HLS streaming, FairPlay DRM, and picture-in-picture automatically. When playback ends or the user exits the player, the bridge sends a `mediaEnded` event back to JavaScript.
 
-**Message types (`TVOSMessage`):**
+#### `updateTopShelf(items: TopShelfItem[]): void`
 
-| Type | Direction | Description |
-|------|-----------|-------------|
-| `'navigate'` | JS to Swift | Request native navigation |
-| `'playMedia'` | JS to Swift | Play a media URL via AVPlayer |
-| `'topShelf'` | JS to Swift | Update Top Shelf content |
-| `'focusEngine'` | Either | Focus engine coordination |
-| `'lifecycle'` | Swift to JS | App lifecycle events (foreground, background) |
+Update the tvOS Top Shelf with content tiles. When the user highlights your app on the Apple TV home screen, the Top Shelf displays these items.
 
-### `useTVOSNavigation(options): void`
+```typescript
+bridge.updateTopShelf([
+  { id: '1', title: 'New Release', imageUrl: 'https://...', deepLink: '/movie/1' },
+  { id: '2', title: 'Trending Now', imageUrl: 'https://...', deepLink: '/movie/2' },
+]);
+```
 
-React hook for handling Siri Remote buttons that are not covered by the standard D-pad navigation.
+#### `on(event: string, callback: (data: any) => void): void`
 
-```tsx
+Listen for events sent from the Swift shell to JavaScript.
+
+```typescript
+bridge.on('mediaEnded', (data) => {
+  console.log('Playback finished at', data.position);
+});
+
+bridge.on('deepLink', (data) => {
+  router.navigate(data.path);
+});
+```
+
+---
+
+## useTVOSNavigation
+
+React hook for handling Siri Remote-specific navigation events. This hook complements the D-pad handling provided by Norigin Spatial Navigation in `@tv-app/core`.
+
+```typescript
 import { useTVOSNavigation } from '@tv-app/platform-tvos';
 
 function MyScreen() {
   useTVOSNavigation({
     onMenu: () => {
-      // Menu button pressed (Escape / keyCode 27)
+      // Siri Remote Menu button (keyCode 27 / Escape)
+      // Acts as "Back" on tvOS
       navigation.goBack();
     },
     onPlayPause: () => {
-      // Play/Pause button pressed (keyCode 179)
-      togglePlayback();
+      // Siri Remote Play/Pause button (keyCode 179)
+      player.togglePlayback();
     },
   });
 
@@ -129,137 +142,108 @@ function MyScreen() {
 }
 ```
 
-**Options:**
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `onMenu` | `() => void` | Called when the Menu button is pressed (keyCode 27 / Escape) |
-| `onPlayPause` | `() => void` | Called when the Play/Pause button is pressed (keyCode 179) |
-
----
-
-## JS-Swift Bridge Communication
-
-### JS to Swift
-
-The Swift app registers a `WKScriptMessageHandler` named `tvApp`. JavaScript sends messages through this handler:
-
-```ts
-// This is what TVOSBridge.send() does internally:
-window.webkit.messageHandlers.tvApp.postMessage({
-  type: 'playMedia',
-  payload: { url: 'https://example.com/video.m3u8', title: 'Episode 1' }
-});
-```
-
-On the Swift side, the message arrives in `userContentController(_:didReceive:)` as a dictionary with `type` and `payload` keys.
-
-### Swift to JS
-
-The Swift app sends messages to JavaScript by evaluating a global function:
-
-```swift
-// In TVAppViewController:
-let message: [String: Any] = ["type": "lifecycle", "payload": ["state": "foreground"]]
-if let jsonData = try? JSONSerialization.data(withJSONObject: message),
-   let jsonString = String(data: jsonData, encoding: .utf8) {
-    webView.evaluateJavaScript("window.__tvos_receive(\(jsonString))")
-}
-```
-
-The `TVOSBridge` constructor registers `window.__tvos_receive` to dispatch incoming messages to listeners registered via `bridge.on()`.
-
-### Platform Detection
-
-The Swift wrapper injects `window.__TVOS_BRIDGE__ = true` at document start via a `WKUserScript`. The `@tv-app/core` platform detection reads this flag to identify the tvOS platform, and `TVOSBridge.isAvailable()` checks for it directly.
-
 ---
 
 ## Siri Remote Key Mapping
 
-The Siri Remote touchpad generates standard arrow key events in WKWebView, which Norigin spatial navigation handles automatically. The following additional buttons have specific key codes:
+The Siri Remote touchpad generates standard arrow key events for D-pad swipes. These are handled automatically by Norigin Spatial Navigation. The remaining buttons map as follows:
 
-| Siri Remote Button | keyCode | JavaScript Key | Handled By |
-|--------------------|---------|----------------|------------|
-| Touchpad swipe up | 38 | `ArrowUp` | Norigin (automatic) |
-| Touchpad swipe down | 40 | `ArrowDown` | Norigin (automatic) |
-| Touchpad swipe left | 37 | `ArrowLeft` | Norigin (automatic) |
-| Touchpad swipe right | 39 | `ArrowRight` | Norigin (automatic) |
-| Touchpad click (Select) | 13 | `Enter` | Norigin (automatic) |
-| Menu | 27 | `Escape` | `useTVOSNavigation` |
-| Play/Pause | 179 | `MediaPlayPause` | `useTVOSNavigation` |
-
-The Menu button on the Siri Remote maps to Escape (keyCode 27), which is the same as Android TV's Back button. This means `useRemoteControl({ onBack })` from `@tv-app/core` also catches it via `KeyCode.BACK_ANDROID`.
+| Button | keyCode | Notes |
+|--------|---------|-------|
+| Touchpad D-pad | 37/38/39/40 | Standard arrow keys (Left/Up/Right/Down) |
+| Click/Tap | 13 | Enter -- select the focused item |
+| Menu | 27 | Escape -- acts as Back on tvOS |
+| Play/Pause | 179 | MediaPlayPause |
 
 ---
 
 ## Setting Up the Xcode Project
 
-The package includes a Swift template at `native/TVAppShell/TVAppShell.swift`. To set up a tvOS project:
+To run your React app on Apple TV hardware or the simulator:
 
 1. **Create a new tvOS project** in Xcode (File > New > Project > tvOS > App).
-2. **Add `TVAppShell.swift`** to the project. Copy it from `packages/platform-tvos/native/TVAppShell/TVAppShell.swift`.
-3. **Set the web app URL.** In `TVAppShell.swift`, change the `webAppURL` property:
-   ```swift
-   private let webAppURL = URL(string: "https://your-app.example.com")!
-   ```
-   During development, use `http://localhost:5173` or your machine's local IP.
-4. **Configure the view controller.** Set `TVAppViewController` as your root view controller in the storyboard or in `AppDelegate`.
-5. **Build and run** on the Apple TV Simulator (Xcode > Destination > Apple TV) or a physical Apple TV connected via USB.
+2. **Copy the native Swift shell** -- add `native/TVAppShell/TVAppShell.swift` from this package into your Xcode project.
+3. **Set the web app URL** -- open `TVAppShell.swift` and set the `webAppURL` property to your deployed React app URL (e.g., `https://my-app.example.com` or `http://192.168.1.100:5173` for local development).
+4. **Build and run** on the Apple TV simulator (Xcode > Product > Run) or a physical Apple TV connected via USB-C.
 
-The Swift template handles:
-- Creating and configuring the `WKWebView` with inline media playback enabled.
-- Registering the `tvApp` message handler for JS-to-Swift communication.
-- Injecting the `__TVOS_BRIDGE__` flag at document start.
-- Routing incoming messages by `type` (playMedia, topShelf, etc.).
-- Providing `sendToJS()` for Swift-to-JS communication.
+The Swift shell creates a `WKWebView` that loads your web app, injects the `window.__TVOS_BRIDGE__` flag, and sets up the `webkit.messageHandlers.tvApp` message handler for JS-to-Swift communication.
 
 ---
 
 ## Top Shelf Integration
 
-tvOS apps can display content on the Top Shelf (the banner area shown when the app is focused on the home screen). Use the bridge to push content to the native layer:
+The tvOS Top Shelf displays content when the user highlights your app on the Apple TV home screen. Use `bridge.updateTopShelf()` to populate it with content tiles.
 
-```ts
+```typescript
 const bridge = new TVOSBridge();
 
+// Update Top Shelf with featured content
 bridge.updateTopShelf([
-  { title: 'Continue Watching: Episode 5', imageUrl: 'https://...', id: 'ep-5' },
-  { title: 'New: Season 2 Premiere', imageUrl: 'https://...', id: 'season-2' },
+  {
+    id: 'featured-1',
+    title: 'Featured Movie',
+    imageUrl: 'https://cdn.example.com/topshelf/featured.jpg',
+    deepLink: '/movie/featured-1',
+  },
 ]);
 ```
 
-The Swift side receives this as a `topShelf` message. You will need to implement a Top Shelf extension in your Xcode project that reads this data (e.g., from `UserDefaults` shared via an App Group) and renders the appropriate `TVTopShelfContentProvider`.
+When the user selects a Top Shelf item, the Swift shell sends a `deepLink` event to JavaScript with the associated path. Handle it with `bridge.on('deepLink', ...)` to navigate to the correct screen.
 
 ---
 
-## Native Media Playback via AVPlayer
+## Native Media Playback
 
-For video playback on tvOS, native `AVPlayer` is strongly recommended over HTML5 `<video>`:
+Always use `bridge.playMedia()` instead of HTML5 `<video>` for media playback on tvOS. The native AVPlayer provides:
 
-- Better DRM support (FairPlay Streaming).
-- Hardware-accelerated decoding.
-- Native picture-in-picture and Siri Remote scrubbing.
-- Reliable HLS playback with adaptive bitrate.
+- **FairPlay DRM** -- required for protected content on Apple platforms
+- **Hardware-accelerated decoding** -- significantly better performance than software decoding in WKWebView
+- **System media controls** -- integrates with the Siri Remote play/pause and scrubbing gestures
+- **Picture-in-Picture** -- supported automatically by the native player
 
-Use the bridge to hand off playback to the native layer:
+HTML5 video in WKWebView has limited codec support and cannot handle FairPlay DRM.
 
-```ts
-const bridge = new TVOSBridge();
+---
 
-bridge.playMedia(
-  'https://example.com/stream.m3u8',
-  'Episode 1: The Beginning'
-);
+## Platform Detection
+
+The Swift wrapper injects `window.__TVOS_BRIDGE__ = true` into the WKWebView before your app loads. Use this flag to detect when your app is running inside the tvOS shell:
+
+```typescript
+if (window.__TVOS_BRIDGE__) {
+  // Running on tvOS -- use native bridge features
+  const bridge = new TVOSBridge();
+  bridge.playMedia({ url: streamUrl });
+} else {
+  // Running in a browser -- use HTML5 video
+  videoElement.src = streamUrl;
+}
 ```
 
-The Swift template logs the URL; in a production app you would create an `AVPlayerViewController` and present it.
+The `usePlatform()` hook from `@tv-app/core` checks this flag automatically and returns `'tvos'` when it is present.
+
+---
+
+## Project Structure
+
+```
+packages/platform-tvos/
+├── src/
+│   ├── TVOSBridge.ts          # JS ↔ Swift bridge class
+│   ├── useTVOSNavigation.ts   # Siri Remote navigation hook
+│   ├── types.ts               # TypeScript interfaces (MediaOptions, TopShelfItem, etc.)
+│   ├── index.ts               # Public API exports
+│   └── __tests__/             # Unit tests
+├── native/
+│   └── TVAppShell/
+│       └── TVAppShell.swift   # Native Swift app shell template
+├── package.json
+└── tsconfig.json
+```
 
 ---
 
 ## Testing
-
-### Unit Tests
 
 ```bash
 # From the monorepo root
@@ -269,22 +253,6 @@ npx turbo run test --filter=@tv-app/platform-tvos
 npx turbo run test:coverage --filter=@tv-app/platform-tvos
 ```
 
-Tests run in jsdom and mock `window.webkit` and `window.__TVOS_BRIDGE__`.
+Tests run in a jsdom environment. The `webkit.messageHandlers` global and `window.__TVOS_BRIDGE__` flag are mocked per test. Since there is no tvOS emulator accessible from Node.js, the tests verify bridge message formatting, event callback dispatch, and key event handling logic.
 
-### Testing with Apple TV Simulator
-
-1. Open the Xcode project with the `TVAppShell.swift` template.
-2. Select an Apple TV simulator as the run destination.
-3. Build and run. The simulator opens with your web app loaded in the WKWebView.
-4. Use the **Siri Remote simulator** (Xcode menu: Window > Simulator > Show Apple TV Remote, or Shift+Cmd+R in the Simulator app).
-5. The touchpad on the simulated remote generates arrow key events; click generates Enter.
-
-For rapid web development, point `webAppURL` at your Vite dev server (`http://localhost:5173`). Changes to the React app hot-reload inside the simulator's WKWebView.
-
-### Testing Without Xcode
-
-If you do not have a Mac or Xcode, you can still develop and test the web portion:
-
-- Run the app in a desktop browser -- spatial navigation and `useRemoteControl` work with keyboard input.
-- `TVOSBridge.isAvailable()` returns `false` in a browser, and `bridge.send()` logs a warning instead of crashing.
-- Use `useTVOSNavigation` freely -- it listens for standard keyboard events (Escape, MediaPlayPause) that work in any browser.
+For end-to-end testing on Apple TV hardware, build the Xcode project and run it on the simulator or a physical device.

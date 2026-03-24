@@ -1,187 +1,187 @@
 # @tv-app/wasm-engine
 
-WebAssembly engine for the TV App Toolkit. Offloads heavy computation from the DOM thread to keep rendering and input handling smooth on constrained TV hardware.
+WebAssembly engine for offloading heavy computation from the DOM thread on resource-constrained TV hardware. Written in AssemblyScript (a TypeScript-like language) and compiled to WASM, with pure-JavaScript fallbacks for platforms where WASM is unavailable.
 
 ---
 
 ## Why WASM for TV Apps
 
-Smart TV hardware is significantly more constrained than desktop or mobile devices. Typical TV SoCs have low-power CPUs (often ARM Cortex-A53 class) and limited RAM (512MB-2GB shared between OS and apps). The browser's main thread must handle:
+TV hardware has limited CPU power and memory compared to desktop or mobile devices. The DOM thread must stay free for 60fps rendering and responsive input handling -- any blocking computation causes visible jank and dropped frames.
 
-- React rendering and reconciliation
-- Spatial navigation calculations
-- User input with low latency (remote control must feel instant)
+This package moves heavy tasks into a WebAssembly module:
 
-Any heavy computation on the main thread causes dropped frames and input lag, which is especially noticeable on TV because users are watching at 60fps from a couch with a slow remote.
+- **Image processing** (blur effects for backgrounds)
+- **String search** (filtering large content catalogs)
+- **Sorting** (ordering datasets without blocking the UI)
+- **Animation curves** (pre-computing easing values)
+- **Fuzzy matching** (typo-tolerant search)
 
-The WASM engine moves expensive operations (image processing, sorting, string matching) into a WebAssembly module that executes at near-native speed, keeping the DOM thread free for what it does best: rendering and responding to input.
+WASM executes at near-native speed and runs synchronously without the overhead of Web Worker message passing, making it ideal for operations that need to return results within a single frame.
 
 ---
 
-## AssemblyScript
+## Installation
 
-The WASM module is written in [AssemblyScript](https://www.assemblyscript.org/), a TypeScript-like language that compiles to WebAssembly. AssemblyScript looks familiar to TypeScript developers but has important differences:
+This package is part of the TV App Toolkit monorepo:
 
-- Uses explicit numeric types: `i32`, `f64`, `u8` instead of `number`
-- No closures, union types, or `any`/`unknown`
-- Arrays are typed: `Int32Array`, `Float64Array`, `Uint8ClampedArray`
-- `unchecked()` skips bounds checking for performance
-- No access to DOM or Node.js APIs
+```json
+{
+  "dependencies": {
+    "@tv-app/wasm-engine": "*"
+  }
+}
+```
 
-The source lives in `assembly/index.ts` and compiles to `build/release.wasm`.
+Run `npm install` from the repo root to resolve workspace dependencies.
 
 ---
 
 ## Available Functions
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `boxBlur` | `(data: Uint8ClampedArray, width: i32, height: i32, radius: i32) => void` | Two-pass (horizontal + vertical) box blur on RGBA pixel data. Modifies the buffer in-place. Useful for background blur effects without GPU shaders. |
-| `fastSearch` | `(haystack: string, needle: string) => i32` | Fast substring search. Returns the index of the first match, or -1 if not found. Useful for filtering large content catalogs client-side. |
-| `quickSort` | `(arr: Float64Array, low: i32, high: i32) => void` | In-place quicksort on a Float64Array between indices `low` and `high` (inclusive). Useful for sorting large datasets (ratings, dates, prices) without blocking the UI. |
-| `easeOutCubic` | `(steps: i32) => Float64Array` | Pre-computes an easeOutCubic animation curve with the given number of steps. Returns a Float64Array of values from 0.0 to 1.0. Useful for pre-computing animation frames in WASM and applying them in JS. |
-| `levenshtein` | `(a: string, b: string) => i32` | Computes the Levenshtein edit distance between two strings. Useful for fuzzy search and typo tolerance in content search UIs. |
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `boxBlur` | `(data: Uint8ClampedArray, width: i32, height: i32, radius: i32) => Uint8ClampedArray` | Fast two-pass box blur on RGBA pixel data for background effects |
+| `fastSearch` | `(haystack: string, needle: string) => i32` | String search returning index of first match, or -1 |
+| `quickSort` | `(arr: Float64Array, low: i32, high: i32) => Float64Array` | In-place quicksort for sorting large datasets without blocking the UI |
+| `easeOutCubic` | `(steps: i32) => Float64Array` | Pre-compute easing curve values for smooth focus animations |
+| `levenshtein` | `(a: string, b: string) => i32` | Levenshtein edit distance for fuzzy search and typo tolerance |
 
 ---
 
 ## Building
 
 ```bash
-# Compile AssemblyScript to WASM (release build)
-npm run asbuild
+cd packages/wasm-engine
 
-# Compile + build TypeScript bridge
+# Compile AssemblyScript to WASM
+npm run asbuild          # → build/release.wasm
+
+# Full build: asbuild + TypeScript compilation
 npm run build
-
-# Debug build (includes source maps, no optimizations)
-npm run asbuild:debug
 ```
 
-The build produces:
-
-| File | Description |
-|------|-------------|
-| `build/release.wasm` | Optimized WASM binary (optimize level 3, shrink level 1) |
-| `build/release.wat` | Human-readable WebAssembly text format |
-| `build/debug.wasm` | Debug WASM binary with source maps |
-| `build/debug.wat` | Debug text format |
-| `dist/index.js` | TypeScript bridge (JS loader + fallbacks) |
-| `dist/index.d.ts` | Type declarations |
-
-Build configuration is in `asconfig.json`.
+The `asbuild` step compiles `assembly/index.ts` (AssemblyScript source) into `build/release.wasm`. The `build` step also compiles the TypeScript wrapper in `src/` that provides the loading logic and JS fallbacks.
 
 ---
 
-## Loading in a Vite App
+## Usage in a Vite App
 
-```ts
-import { loadWasmEngine } from '@tv-app/wasm-engine';
-
-// Vite resolves the URL at build time
-const wasmUrl = new URL(
-  '../node_modules/@tv-app/wasm-engine/build/release.wasm',
-  import.meta.url
-).href;
-
-const engine = await loadWasmEngine(wasmUrl);
-
-// Use WASM functions
-const distance = engine.levenshtein('netflix', 'netflx');  // 1
-const index = engine.fastSearch('The Lord of the Rings', 'Rings');  // 16
-```
-
-### API
-
-```ts
-// Load WASM module (cached after first call)
-loadWasmEngine(wasmUrl: string): Promise<WasmEngine>
-
-// Get already-loaded engine (throws if not loaded)
-getWasmEngine(): WasmEngine
-
-// Load WASM with automatic JS fallback
-loadEngineWithFallback(wasmUrl: string): Promise<WasmEngine>
-
-// Pure-JS implementations of all WASM functions
-jsFallback: WasmEngine
-```
-
----
-
-## JS Fallback for Graceful Degradation
-
-Every WASM function has a pure-JavaScript fallback implementation in `jsFallback`. This ensures your app works even if WASM fails to load (rare on modern TV browsers, but possible on very old firmware).
-
-Use `loadEngineWithFallback()` in production:
-
-```ts
+```typescript
 import { loadEngineWithFallback } from '@tv-app/wasm-engine';
 
-// Tries WASM first, falls back to JS if it fails
-const engine = await loadEngineWithFallback(wasmUrl);
+const engine = await loadEngineWithFallback(
+  new URL('@tv-app/wasm-engine/build/release.wasm', import.meta.url).href
+);
+
+// Fuzzy search
+const distance = engine.levenshtein('hello', 'helo');  // → 1
+
+// Sort a dataset
+const ratings = new Float64Array([4.2, 3.8, 4.9, 3.1, 4.5]);
+engine.quickSort(ratings, 0, ratings.length - 1);
+
+// Pre-compute animation curve
+const curve = engine.easeOutCubic(60);  // 60 steps for a 1-second animation at 60fps
+
+// Background blur
+const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+const blurred = engine.boxBlur(imageData.data, canvas.width, canvas.height, 8);
 ```
-
-You can also use the fallback directly for testing:
-
-```ts
-import { jsFallback } from '@tv-app/wasm-engine';
-
-const distance = jsFallback.levenshtein('hello', 'helo');  // 1
-```
-
-The `boxBlur` JS fallback is a no-op (logs a warning). In production, implement a JS box blur if you need this function without WASM.
 
 ---
 
-## Adding New WASM Functions
+## JavaScript Fallback
+
+The `jsFallback` object provides pure-JavaScript implementations of every WASM function. This ensures your app works on platforms where WebAssembly is unavailable or fails to load (some older TV browsers, restricted environments).
+
+```typescript
+import { loadEngineWithFallback, jsFallback } from '@tv-app/wasm-engine';
+
+// Automatic fallback: tries WASM first, falls back to JS if loading fails
+const engine = await loadEngineWithFallback(wasmUrl);
+
+// Or use the JS fallback directly (e.g., in tests)
+const distance = jsFallback.levenshtein('hello', 'helo');
+```
+
+`loadEngineWithFallback()` is the recommended entry point. It attempts to load and instantiate the WASM module, and if that fails for any reason (network error, unsupported platform, compilation failure), it silently returns the `jsFallback` object instead. The returned engine has the same interface either way.
+
+---
+
+## Adding New Functions
 
 1. **Write the function in `assembly/index.ts`** using AssemblyScript syntax:
-   ```ts
+
+   ```typescript
+   // assembly/index.ts
    export function myFunction(input: i32): i32 {
+     // AssemblyScript code here
      return input * 2;
    }
    ```
 
-2. **Update the `WasmEngine` interface in `src/index.ts`**:
-   ```ts
+2. **Add to the `WasmEngine` interface** in `src/index.ts`:
+
+   ```typescript
    export interface WasmEngine {
      // ... existing functions
      myFunction(input: number): number;
    }
    ```
 
-3. **Add a JS fallback in `src/index.ts`**:
-   ```ts
+3. **Add a JS fallback** in the `jsFallback` object in `src/index.ts`:
+
+   ```typescript
    export const jsFallback: WasmEngine = {
      // ... existing fallbacks
-     myFunction(input) {
+     myFunction(input: number): number {
        return input * 2;
      },
    };
    ```
 
-4. **Add tests in `src/__tests__/jsFallback.test.ts`** for the fallback implementation.
+4. **Add tests** for the fallback implementation to ensure correctness.
 
-5. **Recompile**:
+5. **Rebuild** the WASM module:
+
    ```bash
    npm run asbuild
    ```
 
 ---
 
-## Performance Tips for TV Hardware
+## AssemblyScript Gotchas
 
-**Do:**
-- Pre-compute values in WASM during loading or idle time, then consume the results in JS.
-- Use typed arrays (`Float64Array`, `Uint8ClampedArray`) for data exchange -- they share memory efficiently with WASM.
-- Batch operations. Calling WASM once with a large dataset is faster than many small calls due to the JS-WASM boundary overhead.
-- Use `loadEngineWithFallback()` so your app never crashes if WASM fails.
+AssemblyScript looks like TypeScript but compiles to WebAssembly, which imposes several constraints:
 
-**Avoid:**
-- Frequent small WASM calls in a render loop. The JS-WASM boundary has overhead (~microseconds per call, which adds up at 60fps).
-- Allocating large buffers in WASM on every frame. Reuse buffers across calls.
-- Passing strings back and forth frequently -- string marshaling between JS and WASM is expensive. Pass indices or numeric data when possible.
-- Blocking the main thread with synchronous WASM computation. For very large datasets, consider chunking the work across multiple frames using `requestAnimationFrame`.
+| Gotcha | Details |
+|--------|---------|
+| **Numeric types** | Use explicit types: `i32`, `i64`, `f32`, `f64`, `u8`, `u16`, `u32`. Regular `number` maps to `f64`. |
+| **No closures** | Functions cannot capture variables from their enclosing scope. Pass everything as arguments. |
+| **No union types** | `string | null` is only supported for reference types. Primitive unions are not allowed. |
+| **`unchecked()` for performance** | Wrap array accesses in `unchecked()` to skip bounds checking in hot loops: `unchecked(arr[i])`. Only use this when you are certain the index is valid. |
+| **No dynamic objects** | No `Record`, `Map` with string keys, or arbitrary object shapes. Use typed arrays and explicit parameters. |
+| **String handling** | Strings are UTF-16 encoded. Passing strings across the WASM boundary has overhead -- prefer numeric arrays for hot paths. |
+
+Refer to the [AssemblyScript documentation](https://www.assemblyscript.org/introduction.html) for the full language reference.
+
+---
+
+## Project Structure
+
+```
+packages/wasm-engine/
+├── assembly/
+│   ├── index.ts               # AssemblyScript source (compiles to WASM)
+│   └── tsconfig.json          # AssemblyScript compiler config
+├── build/
+│   └── release.wasm           # Compiled WASM binary (generated by asbuild)
+├── src/
+│   ├── index.ts               # WasmEngine interface, loader, jsFallback
+│   └── __tests__/             # Unit tests
+├── package.json
+└── tsconfig.json
+```
 
 ---
 
@@ -195,4 +195,4 @@ npx turbo run test --filter=@tv-app/wasm-engine
 npx turbo run test:coverage --filter=@tv-app/wasm-engine
 ```
 
-Tests validate the JS fallback implementations. WASM binary tests require building first (`npm run asbuild`).
+Tests run in a jsdom environment and primarily exercise the JavaScript fallback implementations, since WASM instantiation is not available in jsdom. The fallback tests verify that every function produces correct results, ensuring parity between the WASM and JS code paths.
